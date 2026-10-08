@@ -90,6 +90,10 @@ def add_plan(plan_date: str, category: str, planned_text: str, planned_hours: fl
     conn.commit()
     plan_id = cursor.lastrowid
     conn.close()
+    try:
+        sync_to_google_drive()
+    except Exception:
+        pass
     return plan_id
 
 def update_plan_actual(plan_id: int, actual_hours: float, status: str, excuse: str = ""):
@@ -102,6 +106,10 @@ def update_plan_actual(plan_id: int, actual_hours: float, status: str, excuse: s
     """, (actual_hours, status, excuse, plan_id))
     conn.commit()
     conn.close()
+    try:
+        sync_to_google_drive()
+    except Exception:
+        pass
 
 def get_plans_by_date(target_date: str) -> List[Dict[str, Any]]:
     conn = get_connection()
@@ -187,6 +195,10 @@ def add_journal_entry(entry_date: str, title: str, content: str, category: str =
     conn.commit()
     entry_id = cursor.lastrowid
     conn.close()
+    try:
+        sync_to_google_drive()
+    except Exception:
+        pass
     return entry_id
 
 def get_journal_entries(limit: int = 50, category: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -224,3 +236,91 @@ def get_all_settings() -> Dict[str, str]:
     settings = {r["key"]: r["value"] for r in cursor.fetchall()}
     conn.close()
     return settings
+
+# --- Google Drive Auto-Sync & Backup ---
+
+GOOGLE_DRIVE_DIR = "/Users/semihsengul/Library/CloudStorage/GoogleDrive-semihyahama@gmail.com/My Drive/notebook pipeline"
+
+def sync_to_google_drive() -> Dict[str, Any]:
+    """Tüm veri tabanını, markdown günlükleri ve taahhütleri Google Drive'a senkronize eder."""
+    import os
+    import shutil
+    
+    try:
+        os.makedirs(GOOGLE_DRIVE_DIR, exist_ok=True)
+        
+        # 1. Ham SQLite dosyasını yedekle
+        if os.path.exists(DB_FILE):
+            shutil.copy2(DB_FILE, os.path.join(GOOGLE_DRIVE_DIR, "ayna.db"))
+            
+        # 2. Markdown Günlük Dosyası Oluştur (gunluk_notlar.md)
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM journal_entries ORDER BY date DESC, id DESC")
+        journal_rows = [dict(r) for r in cursor.fetchall()]
+        
+        md_journal = "# 📓 AYNA — Düşünce ve Fikir Günlüğü\n\n"
+        md_journal += f"> Son Senkronizasyon: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n---\n\n"
+        
+        if not journal_rows:
+            md_journal += "*Henüz bir günlük kaydı eklenmedi.*\n"
+        else:
+            for item in journal_rows:
+                cat_emoji = {"ders": "📚", "is": "💼", "muzik": "🎵", "spor": "🏃"}.get(item["category"], "💭")
+                md_journal += f"## {cat_emoji} {item['title']}\n"
+                md_journal += f"**Tarih:** {item['date']} | **Kategori:** `{item['category'].upper()}`\n\n"
+                md_journal += f"{item['content']}\n\n"
+                if item.get("ai_reflection"):
+                    md_journal += f"> 🪞 **Ayna Analizi:**\n> {item['ai_reflection']}\n\n"
+                md_journal += "---\n\n"
+                
+        with open(os.path.join(GOOGLE_DRIVE_DIR, "gunluk_notlar.md"), "w", encoding="utf-8") as f:
+            f.write(md_journal)
+            
+        # 3. Markdown Plan ve Taahhüt Dosyası (taahhutler_ve_planlar.md)
+        cursor.execute("SELECT * FROM daily_plans ORDER BY date DESC, id ASC")
+        plan_rows = [dict(r) for r in cursor.fetchall()]
+        stats = calculate_reality_stats()
+        
+        md_plans = "# 🎯 AYNA — Taahhütler ve Gerçekleşenler (Reality Audit)\n\n"
+        md_plans += f"> **Gerçeklik Doğruluk Skoru:** %{stats['reality_score']} | "
+        md_plans += f"**Toplam Hedef:** {stats['total_planned']} sa | "
+        md_plans += f"**Toplam Fiili:** {stats['total_actual']} sa\n\n---\n\n"
+        
+        # Tarihe göre grupla
+        plans_by_date = {}
+        for p in plan_rows:
+            d = p["date"]
+            if d not in plans_by_date:
+                plans_by_date[d] = []
+            plans_by_date[d].append(p)
+            
+        for d, items in plans_by_date.items():
+            md_plans += f"### 📅 {d}\n\n"
+            md_plans += "| Kategori | Hedef / Taahhüt | Plan (sa) | Fiili (sa) | Durum | Mazeret / Not |\n"
+            md_plans += "| :--- | :--- | :---: | :---: | :---: | :--- |\n"
+            for p in items:
+                status_icon = {"completed": "✅ Tamamlandı", "partial": "⏳ Kısmen", "skipped": "❌ Ertelendi", "pending": "🕒 Bekliyor"}.get(p["status"], p["status"])
+                md_plans += f"| `{p['category']}` | {p['planned_text']} | {p['planned_hours']} | {p['actual_hours']} | {status_icon} | {p['excuse'] or '-'} |\n"
+            md_plans += "\n"
+            
+        with open(os.path.join(GOOGLE_DRIVE_DIR, "taahhutler_ve_planlar.md"), "w", encoding="utf-8") as f:
+            f.write(md_plans)
+            
+        # 4. JSON Tam Yedek
+        full_export = {
+            "backup_date": datetime.now().isoformat(),
+            "stats": stats,
+            "plans": plan_rows,
+            "journal": journal_rows
+        }
+        with open(os.path.join(GOOGLE_DRIVE_DIR, "ayna_backup.json"), "w", encoding="utf-8") as f:
+            json.dump(full_export, f, ensure_ascii=False, indent=2)
+            
+        conn.close()
+        return {"success": True, "path": GOOGLE_DRIVE_DIR}
+    except Exception as e:
+        print(f"[Ayna Sync] Google Drive senkronizasyon uyarısı: {e}")
+        return {"success": False, "error": str(e)}
+
