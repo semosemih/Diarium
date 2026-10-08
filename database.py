@@ -97,6 +97,9 @@ def add_plan(plan_date: str, category: str, planned_text: str, planned_hours: fl
     return plan_id
 
 def update_plan_actual(plan_id: int, actual_hours: float, status: str, excuse: str = ""):
+    # Ertelendi / Yapılmadı veya Bekliyor durumunda gerçekleşen süre kesinlikle 0 olmalıdır.
+    if status in ("skipped", "pending"):
+        actual_hours = 0.0
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -135,13 +138,13 @@ def calculate_reality_stats():
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Toplam taahhüt vs gerçekleşen
+    # Toplam taahhüt vs gerçekleşen (Sadece completed ve partial fiili süreye sayılır)
     cursor.execute("""
     SELECT 
         category,
         COUNT(*) as total_items,
         SUM(planned_hours) as total_planned,
-        SUM(actual_hours) as total_actual,
+        SUM(CASE WHEN status IN ('completed', 'partial') THEN actual_hours ELSE 0.0 END) as total_actual,
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_count,
         SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) as skipped_count
     FROM daily_plans
@@ -165,7 +168,7 @@ def calculate_reality_stats():
     cursor.execute("""
     SELECT 
         SUM(planned_hours) as total_planned,
-        SUM(actual_hours) as total_actual,
+        SUM(CASE WHEN status IN ('completed', 'partial') THEN actual_hours ELSE 0.0 END) as total_actual,
         COUNT(*) as total_plans
     FROM daily_plans
     """)
@@ -302,7 +305,8 @@ def sync_to_google_drive() -> Dict[str, Any]:
             md_plans += "| :--- | :--- | :---: | :---: | :---: | :--- |\n"
             for p in items:
                 status_icon = {"completed": "✅ Tamamlandı", "partial": "⏳ Kısmen", "skipped": "❌ Ertelendi", "pending": "🕒 Bekliyor"}.get(p["status"], p["status"])
-                md_plans += f"| `{p['category']}` | {p['planned_text']} | {p['planned_hours']} | {p['actual_hours']} | {status_icon} | {p['excuse'] or '-'} |\n"
+                actual_val = p['actual_hours'] if p['status'] in ('completed', 'partial') else 0.0
+                md_plans += f"| `{p['category']}` | {p['planned_text']} | {p['planned_hours']} | {actual_val} | {status_icon} | {p['excuse'] or '-'} |\n"
             md_plans += "\n"
             
         with open(os.path.join(GOOGLE_DRIVE_DIR, "taahhutler_ve_planlar.md"), "w", encoding="utf-8") as f:

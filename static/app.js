@@ -338,16 +338,31 @@ async function loadDayEndTable() {
     return;
   }
 
-  tbody.innerHTML = todayPlans.map(p => `
+  tbody.innerHTML = todayPlans.map(p => {
+    // Gerçekleşen süre kuralı:
+    // Yalnızca 'completed' veya 'partial' ise süre olabilir.
+    // 'skipped' (Ertelendi / Yapılmadı) veya 'pending' (Bekliyor) ise KESİNLİKLE 0 saattir.
+    let initialActual = 0;
+    if (p.status === 'completed') {
+      initialActual = (p.actual_hours !== null && p.actual_hours !== undefined && p.actual_hours > 0) ? p.actual_hours : p.planned_hours;
+    } else if (p.status === 'partial') {
+      initialActual = p.actual_hours || 0;
+    } else {
+      initialActual = 0;
+    }
+
+    const isNonDone = (p.status === 'skipped' || p.status === 'pending');
+
+    return `
     <tr data-id="${p.id}">
       <td><span class="plan-cat-tag cat-tag-${p.category}">${p.category}</span></td>
       <td><strong>${escapeHtml(p.planned_text)}</strong></td>
       <td>${p.planned_hours} sa</td>
       <td>
-        <input type="number" step="any" min="0" max="24" class="table-input" id="act_${p.id}" value="${p.actual_hours || p.planned_hours}">
+        <input type="number" step="any" min="0" max="24" class="table-input" id="act_${p.id}" value="${initialActual}" ${isNonDone ? 'disabled' : ''}>
       </td>
       <td>
-        <select class="status-select" id="st_${p.id}">
+        <select class="status-select" id="st_${p.id}" onchange="handlePlanStatusChange(${p.id}, ${p.planned_hours})">
           <option value="pending" ${p.status === 'pending' ? 'selected' : ''}>Bekliyor</option>
           <option value="completed" ${p.status === 'completed' ? 'selected' : ''}>Tamamlandı</option>
           <option value="partial" ${p.status === 'partial' ? 'selected' : ''}>Kısmen Yapıldı</option>
@@ -358,17 +373,55 @@ async function loadDayEndTable() {
         <input type="text" class="table-excuse-input" id="ex_${p.id}" placeholder="Mazeret / Gözlem" value="${escapeHtml(p.excuse || '')}">
       </td>
       <td>
-        <button class="btn-sm" onclick="savePlanActual(${p.id})">Kaydet</button>
+        <button class="btn-sm" id="btn_save_${p.id}" onclick="savePlanActual(${p.id})">Kaydet</button>
       </td>
     </tr>
-  `).join('');
+    `;
+  }).join('');
 }
+
+// Status selection change handler
+window.handlePlanStatusChange = function(planId, plannedHours) {
+  const statusEl = document.getElementById(`st_${planId}`);
+  const actEl = document.getElementById(`act_${planId}`);
+  if (!statusEl || !actEl) return;
+
+  const status = statusEl.value;
+  if (status === 'skipped' || status === 'pending') {
+    actEl.value = 0;
+    actEl.disabled = true;
+  } else if (status === 'completed') {
+    actEl.disabled = false;
+    if (parseFloat(actEl.value) === 0 || !actEl.value) {
+      actEl.value = plannedHours;
+    }
+  } else if (status === 'partial') {
+    actEl.disabled = false;
+    if (parseFloat(actEl.value) === 0 || !actEl.value) {
+      actEl.value = (plannedHours / 2).toFixed(1);
+    }
+  }
+};
 
 // Save Single Plan Result
 window.savePlanActual = async function(planId) {
-  const actualHours = parseFloat(document.getElementById(`act_${planId}`).value) || 0;
-  const status = document.getElementById(`st_${planId}`).value;
-  const excuse = document.getElementById(`ex_${planId}`).value;
+  const statusEl = document.getElementById(`st_${planId}`);
+  const actEl = document.getElementById(`act_${planId}`);
+  const excuseEl = document.getElementById(`ex_${planId}`);
+  const saveBtn = document.getElementById(`btn_save_${planId}`);
+
+  const status = statusEl ? statusEl.value : 'pending';
+  let actualHours = parseFloat(actEl ? actEl.value : 0) || 0;
+  if (status === 'skipped' || status === 'pending') {
+    actualHours = 0;
+    if (actEl) actEl.value = 0;
+  }
+  const excuse = excuseEl ? excuseEl.value : '';
+
+  if (saveBtn) {
+    saveBtn.innerText = '...';
+    saveBtn.disabled = true;
+  }
 
   try {
     const res = await fetch(`/api/plans/${planId}`, {
@@ -377,10 +430,24 @@ window.savePlanActual = async function(planId) {
       body: JSON.stringify({ actual_hours: actualHours, status, excuse })
     });
     if (res.ok) {
-      loadStats();
+      if (saveBtn) {
+        saveBtn.innerText = '✓ Kaydedildi';
+        setTimeout(() => {
+          if (saveBtn) {
+            saveBtn.innerText = 'Kaydet';
+            saveBtn.disabled = false;
+          }
+        }, 1200);
+      }
+      await loadStats();
+      await loadTodayPlans();
     }
   } catch (err) {
     alert('Güncellenirken hata oluştu.');
+    if (saveBtn) {
+      saveBtn.innerText = 'Kaydet';
+      saveBtn.disabled = false;
+    }
   }
 };
 
@@ -396,6 +463,25 @@ async function submitDayEndReflection() {
   box.innerText = 'Bugünkü taahhütlerin ve mazeretlerin analiz ediliyor...';
 
   try {
+    // Tablodaki tüm açık satırları otomatik olarak güncelleyip kaydet
+    for (const p of todayPlans) {
+      const statusEl = document.getElementById(`st_${p.id}`);
+      const actEl = document.getElementById(`act_${p.id}`);
+      const excuseEl = document.getElementById(`ex_${p.id}`);
+      if (statusEl && actEl && excuseEl) {
+        const st = statusEl.value;
+        let act = parseFloat(actEl.value) || 0;
+        if (st === 'skipped' || st === 'pending') {
+          act = 0;
+        }
+        await fetch(`/api/plans/${p.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actual_hours: act, status: st, excuse: excuseEl.value })
+        });
+      }
+    }
+
     const res = await fetch('/api/plans/day-end', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -403,7 +489,8 @@ async function submitDayEndReflection() {
     });
     const data = await res.json();
     box.innerText = data.reflection || 'Değerlendirme alınamadı.';
-    loadStats();
+    await loadStats();
+    await loadDayEndTable();
   } catch (err) {
     box.innerText = 'Günün analizi alınırken hata oluştu.';
   } finally {
