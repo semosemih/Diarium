@@ -344,7 +344,7 @@ async function loadDayEndTable() {
       <td><strong>${escapeHtml(p.planned_text)}</strong></td>
       <td>${p.planned_hours} sa</td>
       <td>
-        <input type="number" step="0.25" min="0" max="24" class="table-input" id="act_${p.id}" value="${p.actual_hours || p.planned_hours}">
+        <input type="number" step="any" min="0" max="24" class="table-input" id="act_${p.id}" value="${p.actual_hours || p.planned_hours}">
       </td>
       <td>
         <select class="status-select" id="st_${p.id}">
