@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ayna — Radikal Dürüstlük & Kişisel Not Sistemi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand-section">
+        <div class="brand-logo">
+          <div class="logo-symbol">🪞</div>
+          <div class="logo-text">
+            <h2>AYNA</h2>
+            <span>Radikal Dürüstlük</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Reality Metric Card in Sidebar -->
+      <div class="sidebar-metric-card">
+        <div class="metric-header">
+          <span class="label">GERÇEKLİK DOĞRULUK SKORU</span>
+          <span class="badge" id="sidebarBiasBadge">Nötr</span>
+        </div>
+        <div class="metric-score-row">
+          <span class="score-number" id="sidebarRealityScore">-%</span>
+          <span class="score-desc" id="sidebarScoreDesc">Hesaplanıyor...</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="sidebarRealityBar" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="tab-today">
+          <span class="nav-icon">🌅</span>
+          <span class="nav-title">Bugünün Planı</span>
+        </button>
+        <button class="nav-item" data-tab="tab-dayend">
+          <span class="nav-icon">🌙</span>
+          <span class="nav-title">Gün Sonu Muhasebesi</span>
+        </button>
+        <button class="nav-item" data-tab="tab-journal">
+          <span class="nav-icon">📓</span>
+          <span class="nav-title">Fikir & Düşünce Günlüğü</span>
+        </button>
+        <button class="nav-item" data-tab="tab-stats">
+          <span class="nav-icon">📊</span>
+          <span class="nav-title">Gerçeklik Analitiği</span>
+        </button>
+        <button class="nav-item" data-tab="tab-settings">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-title">Model & Ayarlar</span>
+        </button>
+      </nav>
+
+      <!-- LLM Engine Status Indicator -->
+      <div class="llm-status-box" id="llmStatusBox">
+        <div class="status-top-row">
+          <div class="status-indicator-dot" id="statusDot"></div>
+          <div class="status-info">
+            <div class="status-title" id="statusTitle">Ollama Denetleniyor...</div>
+            <div class="status-model" id="statusModel">Yerel Motor</div>
+          </div>
+        </div>
+        <div id="modelDownloadWrap" style="display: none; margin-top: 0.5rem; width: 100%;">
+          <button id="btnDownloadModel" class="btn-download-model">⬇️ Modeli İndir (Tek Tıkla)</button>
+          <div id="downloadProgressBarBg" class="progress-bar-bg" style="display: none; margin-top: 0.4rem;">
+            <div id="downloadProgressBarFill" class="progress-bar-fill" style="width: 0%;"></div>
+          </div>
+          <span id="downloadProgressText" style="display: none; font-size: 0.68rem; color: var(--text-dim); margin-top: 0.2rem;">%0 indiriliyor...</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Top Bar -->
+      <header class="top-bar">
+        <div class="current-date-info">
+          <h1 id="pageTitle">Günün Taahhütleri</h1>
+          <p class="subtitle" id="currentDateFormatted">Yükleniyor...</p>
+        </div>
+        <div class="top-actions">
+          <button class="action-btn mirror-action-btn" id="btnTriggerMirror">
+            <span class="btn-icon">⚡</span>
+            <span>Ayna Kontrolü</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- TAB 1: Bugünün Planı (Morning Commitments) -->
+      <section class="tab-pane active" id="tab-today">
+        <div class="grid-layout">
+          <!-- Left: New Commitment Form & List -->
+          <div class="content-card">
+            <div class="card-header">
+              <h3>🎯 Bugün Neler Yapacaksın?</h3>
+              <p class="card-subtitle">Kendini kandırmadan, sadece gerçekten tamamlayabileceğin taahhütleri yaz.</p>
+            </div>
+
+            <!-- Quick Add Plan Form -->
+            <form id="addPlanForm" class="plan-form">
+              <div class="form-row category-selector">
+                <label class="cat-pill cat-ders">
+                  <input type="radio" name="planCategory" value="ders" checked>
+                  <span class="pill-body">📚 Ders</span>
+                </label>
+                <label class="cat-pill cat-is">
+                  <input type="radio" name="planCategory" value="is">
+                  <span class="pill-body">💼 İş</span>
+                </label>
+                <label class="cat-pill cat-muzik">
+                  <input type="radio" name="planCategory" value="muzik">
+                  <span class="pill-body">🎵 Müzik</span>
+                </label>
+                <label class="cat-pill cat-spor">
+                  <input type="radio" name="planCategory" value="spor">
+                  <span class="pill-body">🏃 Spor</span>
+                </label>
+              </div>
+
+              <div class="form-row input-group">
+                <input type="text" id="planTextInput" placeholder="Ne yapacaksın? (Örn: 2 saat kompozisyon & aranjman bitir)" required>
+                <div class="hour-input-wrap">
+                  <input type="number" id="planHoursInput" min="0.25" max="18" step="0.5" value="2.0" required>
+                  <span class="hour-unit">saat</span>
+                </div>
+                <button type="submit" class="btn-primary">Ekle</button>
+              </div>
+            </form>
+
+            <!-- Today's Commitment List -->
+            <div class="plan-items-section">
+              <div class="section-title-row">
+                <h4>Kayıtlı Taahhütler</h4>
+                <span class="total-hours-badge" id="todayTotalPlanned">Toplam: 0 saat</span>
+              </div>
+              <div class="plan-list" id="todayPlanList">
+                <div class="empty-placeholder">Henüz bugüne bir taahhüt girmedin. Yukarıdan ilk planını ekle.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: AI Brutal Mirror / Critique Panel -->
+          <div class="content-card mirror-card">
+            <div class="card-header">
+              <div class="mirror-header-title">
+                <span class="mirror-symbol">🪞</span>
+                <div>
+                  <h3>Ayna'nın Eleştirisi</h3>
+                  <p class="card-subtitle">Senin geçmiş verilerine dayalı gerçekçi benliğin</p>
+                </div>
+              </div>
+              <div class="thinking-spinner" id="critiqueSpinner" style="display: none;"></div>
+            </div>
+
+            <div class="mirror-body" id="mirrorCritiqueBox">
+              <div class="mirror-intro">
+                <p>Planlarını girdikten sonra yukarıdaki <strong>"Ayna Kontrolü"</strong> butonuna tıkla.</p>
+                <p class="quote">"Gerçeklerle yüzleşmeyen insan, her sabah yeni bir hayal kurup her akşam aynı pişmanlıkla uyur."</p>
+              </div>
+            </div>
+
+            <div class="card-footer-tip">
+              💡 <span>Ayna, son haftalardaki gerçekleşme oranlarını hesaba katarak aşırı iyimser hedefleri yüzüne vurur.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: Gün Sonu Muhasebesi (Evening Reality Check) -->
+      <section class="tab-pane" id="tab-dayend">
+        <div class="content-card">
+          <div class="card-header">
+            <h3>🌙 Gün Sonu Muhasebesi: Gerçekte Ne Oldu?</h3>
+            <p class="card-subtitle">Sabah koyduğun hedeflerin ne kadarını gerçekten yaptın? Kendine yalan söyleme.</p>
+          </div>
+
+          <div class="review-table-container">
+            <table class="review-table">
+              <thead>
+                <tr>
+                  <th>Alan</th>
+                  <th>Hedef</th>
+                  <th>Planlanan</th>
+                  <th>Gerçekleşen Süre</th>
+                  <th>Sonuç Durumu</th>
+                  <th>Mazeret / Not (Varsa)</th>
+                  <th>Kaydet</th>
+                </tr>
+              </thead>
+              <tbody id="dayEndTableBody">
+                <tr>
+                  <td colspan="7" class="text-center">Yükleniyor...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="dayend-reflection-input">
+            <label for="dayEndGeneralNote">Günün Genel Değerlendirmesi & Zihinsel Durumun:</label>
+            <textarea id="dayEndGeneralNote" rows="3" placeholder="Bugün seni ne durdurdu? Nerede odaklandın, nerede dikkatini kaybettin?"></textarea>
+            <button class="btn-primary" id="btnSubmitDayEnd">Günü Kapat & Ayna Raporu Al</button>
+          </div>
+
+          <!-- Day End Reflection Result Box -->
+          <div class="mirror-body" id="dayEndReflectionBox" style="margin-top: 1.5rem; display: none;"></div>
+        </div>
+      </section>
+
+      <!-- TAB 3: Fikir & Düşünce Günlüğü (Freeform Journal) -->
+      <section class="tab-pane" id="tab-journal">
+        <div class="grid-layout">
+          <!-- Journal Form -->
+          <div class="content-card">
+            <div class="card-header">
+              <h3>✍️ Serbest Fikir & Not Girişi</h3>
+              <p class="card-subtitle">Müzik fikirleri, ders notları, iş stratejileri veya kişisel hislerin. Ayna bunu analiz edip damıtacak.</p>
+            </div>
+
+            <form id="journalForm">
+              <div class="form-row">
+                <input type="text" id="journalTitleInput" placeholder="Başlık (örn: Yeni parça için synth fikri veya çalışma rutini)" required>
+              </div>
+              <div class="form-row category-selector">
+                <label class="cat-pill cat-ders"><input type="radio" name="journalCategory" value="ders"><span class="pill-body">📚 Ders</span></label>
+                <label class="cat-pill cat-is"><input type="radio" name="journalCategory" value="is"><span class="pill-body">💼 İş</span></label>
+                <label class="cat-pill cat-muzik"><input type="radio" name="journalCategory" value="muzik" checked><span class="pill-body">🎵 Müzik</span></label>
+                <label class="cat-pill cat-spor"><input type="radio" name="journalCategory" value="spor"><span class="pill-body">🏃 Spor</span></label>
+                <label class="cat-pill cat-genel"><input type="radio" name="journalCategory" value="genel"><span class="pill-body">💭 Genel</span></label>
+              </div>
+              <div class="form-row">
+                <textarea id="journalContentInput" rows="6" placeholder="Aklındaki her şeyi dök. Sansürsüz, dağınık veya detaylı olabilir..." required></textarea>
+              </div>
+              <button type="submit" class="btn-primary" id="btnSaveJournal">Ayna'ya Gönder & Kaydet</button>
+            </form>
+          </div>
+
+          <!-- Journal Feed & AI Insights -->
+          <div class="content-card">
+            <div class="card-header">
+              <h3>📚 Notlar & Ayna Çıkarımları</h3>
+              <div class="category-filter-pills" id="journalFilterPills">
+                <button class="filter-btn active" data-filter="all">Tümü</button>
+                <button class="filter-btn" data-filter="muzik">Müzik</button>
+                <button class="filter-btn" data-filter="ders">Ders</button>
+                <button class="filter-btn" data-filter="is">İş</button>
+                <button class="filter-btn" data-filter="spor">Spor</button>
+              </div>
+            </div>
+
+            <div class="journal-feed" id="journalFeed">
+              <div class="empty-placeholder">Henüz bir günlük kaydı eklenmedi.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: Gerçeklik Analitiği & Geçmiş -->
+      <section class="tab-pane" id="tab-stats">
+        <div class="stats-overview-grid">
+          <div class="stat-card">
+            <span class="stat-label">Toplam Taahhüt Edilen</span>
+            <span class="stat-val" id="statTotalPlanned">0 saat</span>
+            <span class="stat-sub">Tüm planların toplamı</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Gerçekten Yapılan</span>
+            <span class="stat-val accent-green" id="statTotalActual">0 saat</span>
+            <span class="stat-sub">Fiilen harcanan emek</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Gerçeklik İsabet Skoru</span>
+            <span class="stat-val accent-purple" id="statRealityScore">0%</span>
+            <span class="stat-sub">Taahhüdü tutturma gücün</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">İyimserlik Yanılgısı (Planning Fallacy)</span>
+            <span class="stat-val accent-red" id="statOptimismBias">0%</span>
+            <span class="stat-sub">Kendini abartma payın</span>
+          </div>
+        </div>
+
+        <div class="content-card" style="margin-top: 1.5rem;">
+          <div class="card-header">
+            <h3>📊 4 Temel Alanda Gerçeklik Dağılımı</h3>
+            <p class="card-subtitle">Hangi alanda kendine ne kadar dürüstsün?</p>
+          </div>
+          <div class="pillar-stats-grid" id="pillarStatsGrid">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: Ayarlar & Yerel LLM Rehberi -->
+      <section class="tab-pane" id="tab-settings">
+        <div class="content-card">
+          <div class="card-header">
+            <h3>⚙️ Yerel LLM ve Kişiselleştirme Ayarları</h3>
+            <p class="card-subtitle">Mac'inin gücünü kullanarak %100 gizli ve yerel çalışan zeka motoru</p>
+          </div>
+
+          <div class="settings-form-grid">
+            <div class="setting-item">
+              <label>Ollama API Adresi</label>
+              <input type="text" id="settingOllamaUrl" value="http://localhost:11434">
+              <span class="setting-desc">Varsayılan yerel servis portu</span>
+            </div>
+            <div class="setting-item">
+              <label>Aktif Model</label>
+              <input type="text" id="settingOllamaModel" value="qwen2.5:7b">
+              <span class="setting-desc">Tavsiye edilen: <code>qwen2.5:7b</code> veya <code>llama3.1:8b</code></span>
+            </div>
+            <div class="setting-item">
+              <label>Kullanıcı Adı</label>
+              <input type="text" id="settingUserName" value="Semih">
+              <span class="setting-desc">Ayna'nın sana hitap edeceği isim</span>
+            </div>
+            <div class="setting-item">
+              <label>Dürüstlük Seviyesi</label>
+              <select id="settingHonestyLevel">
+                <option value="brutal" selected>Acımasız / Filtresiz (Tavsiye Edilen)</option>
+                <option value="balanced">Dengeli ve Objektif</option>
+                <option value="gentle">Yumuşak ve Yol Gösterici</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn-primary" id="btnSaveSettings" style="margin-top: 1rem;">Ayarları Kaydet</button>
+
+          <!-- Mac Setup Guide Box -->
+          <div class="mac-setup-guide">
+            <h4>💡 Mac'te 2 Dakikada Yerel Modeli Başlatma Rehberi</h4>
+            <p>Eğer Mac'inde henüz Ollama kurulu değilse, Terminal'i açıp şu tek komutu çalıştırman yeterlidir:</p>
+            <div class="code-snippet-box">
+              <code>brew install ollama && ollama run qwen2.5:7b</code>
+            </div>
+            <p class="guide-note">Bu komut modeli indirir ve Mac'inin GPU'suyla sessizce hazır tutar. Model indikten sonra Ayna otomatik olarak ona bağlanacaktır.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

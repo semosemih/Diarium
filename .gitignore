@@ -1,0 +1,45 @@
+# Python Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# SQLite Database & User Personal Data (Gizlilik İçin Kesinlikle Git'e Girmez)
+*.db
+*.sqlite
+*.sqlite3
+ayna.db
+
+# macOS System Files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Application Builds & Packages
+*.app/
+build/
+dist/
+*.egg-info/
+Ayna.iconset/
+
+# Logs & Temporary Files
+*.log
+*.tmp
+scratch/
+
+# IDE & Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
