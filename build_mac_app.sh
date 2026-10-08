@@ -45,21 +45,27 @@ cat << 'EOF' > "${DESKTOP_APP}/Contents/Info.plist"
 </plist>
 EOF
 
+# Copy AppIcon if exists
+if [ -f "${PROJECT_DIR}/AppIcon.icns" ]; then
+    cp "${PROJECT_DIR}/AppIcon.icns" "${DESKTOP_APP}/Contents/Resources/AppIcon.icns"
+fi
+
 # Create executable runner
 cat << EOF > "${DESKTOP_APP}/Contents/MacOS/Ayna"
 #!/bin/bash
+exec > /tmp/ayna_launch.log 2>&1
 DIR="${PROJECT_DIR}"
 cd "\$DIR" || exit 1
-export PATH="/opt/homebrew/bin:/usr/local/bin:\$PATH"
-if [ -d ".venv" ]; then
-    source .venv/bin/activate
-fi
-exec python3 app.py
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:\$PATH"
+exec "\$DIR/.venv/bin/python3" "\$DIR/app.py"
 EOF
 
 chmod +x "${DESKTOP_APP}/Contents/MacOS/Ayna"
 
-# Also copy/link to /Applications so Spotlight / Raycast indexes it globally
+# Also copy to /Applications so Spotlight / Raycast indexes it globally
 cp -R "${DESKTOP_APP}" /Applications/ 2>/dev/null || true
 
-echo "Ayna.app created successfully on Desktop and in /Applications!"
+# Refresh LaunchServices database
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DESKTOP_APP" 2>/dev/null || true
+
+echo "Ayna.app created and registered successfully on Desktop and in /Applications!"

@@ -9,8 +9,17 @@ import subprocess
 import atexit
 import shutil
 
-PORT = 8765
+DEFAULT_PORT = 8920
 HOST = "127.0.0.1"
+
+def find_available_port(start_port: int = DEFAULT_PORT) -> int:
+    for p in range(start_port, start_port + 50):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex((HOST, p)) != 0:
+                return p
+    return start_port
+
+PORT = find_available_port(DEFAULT_PORT)
 URL = f"http://{HOST}:{PORT}"
 
 ollama_process = None
@@ -93,6 +102,8 @@ def open_window():
         if is_port_in_use(PORT):
             break
         time.sleep(0.1)
+
+    print(f"[Ayna] Ayna açılıyor: {URL}")
 
     # Try pywebview first for 100% native Cocoa/WebKit desktop app experience
     try:
